@@ -1,6 +1,7 @@
 import pickle
 import socket
 import select # gives OS level monitoring operations for things
+from message_model import Message
 
 
 HEADER_LENGTH = 10
@@ -19,29 +20,66 @@ server_socket.listen()
 
 socket_list = [server_socket]
 clients = {}
+usernames = []
 
 print(f"The server is listening for connections on {IP}:{PORT}...")
-def receive_message(client_socket):
+def receive_message(client_socket, msg_type = "connection"):
     try:
-        message_header = client_socket.recv(HEADER_LENGTH)
+        if msg_type == "connection":
+            message_header = client_socket.recv(HEADER_LENGTH)
 
-        # if a client closes a connection gracefully, the header will be empty
-        if not len(message_header):
-            return False
-        message_length = int(message_header.decode("utf-8").strip())
-        return {"header": message_header, "data": client_socket.recv(message_length)}
+            # if a client closes a connection gracefully, the header will be empty
+            if not len(message_header):
+                return False
+            message_length = int(message_header.decode("utf-8").strip())
+            msg = client_socket.recv(message_length)
+
+            return {"header": message_header, "data": msg}
+        else:
+            message_header = client_socket.recv(HEADER_LENGTH)
+
+            # if a client closes a connection gracefully, the header will be empty
+            if not len(message_header):
+                return False
+            message_length = int(message_header.decode("utf-8").strip())
+            msg = client_socket.recv(message_length)
+            msg = pickle.loads(msg)
+            print("Message ", msg)
+
+            return {"header": message_header, "data": msg}
+
     except:
         # if the client closes the connection violently or just connection is lost
         return False
 
 
-if __name__ == '__main__':
-    # list of sockets in server, along with the clients
-    socket_list = [server_socket]
+def get_socket_using_username(username):
+    for client_socket, data in clients.items():
+        if data["data"].decode("utf-8") == username:
+            return client_socket
 
-    # list of connected clients
-    # Format - {"socket":"header and name"}
-    clients = {}
+def send_msg_to_client(msg, client_socket):
+    msg = bytes(f"{len(msg):<{HEADER_LENGTH}}", 'utf-8') + msg
+    client_socket.send(msg)
+def handle_personal_msg(data, sender_socket):
+    # getting user who sent the message
+    user = clients[sender_socket]
+    # check if client is available
+    if data.receiver not in usernames:
+        error = f"User {data.receiver} is not connected to the server."
+        error_msg = Message("server", user["data"], error,"error")
+        send_msg_to_client(error_msg, sender_socket)
+        print("ERROR: ",f"User {data.receiver} is not connected to the server.")
+        return
+
+    preview_length = 20
+    print(f"Message received from {data.sender} for {data.receiver} with msg {data.msg[:preview_length]}")
+    receiver = data.receiver
+    receiver_socket = get_socket_using_username(receiver)
+    msg = pickle.dumps(data)
+    send_msg_to_client(msg, receiver_socket)
+
+if __name__ == '__main__':
 
     while True:
         # Calls Unix select() system call or Windows select() WinSock call with three parameters:
@@ -71,11 +109,12 @@ if __name__ == '__main__':
 
                 socket_list.append(client_socket)
                 clients[client_socket] = user
+                usernames.append(user['data'].decode('utf-8'))
                 print('Accepted new connection from {}:{}, username: {}'.format(*client_address, user['data'].decode('utf-8')))
                 client_socket.send(('Accepted new connection from {}:{}, username: {}'.format(*client_address, user['data'])).encode("utf-8"))
             else:
                 # an existing user is sending a message
-                message = receive_message(socket)
+                message = receive_message(socket, "user")
 
                 if message is False:
                     print('Closed connection from: {}'.format(clients[socket]['data'].decode('utf-8')))
@@ -83,15 +122,23 @@ if __name__ == '__main__':
                     del clients[socket]
                     continue
 
+                data = message["data"]
+
                 # getting user who sent the message
                 user = clients[socket]
-                print(f'Received message from {user["data"].decode("utf-8")}: {message["data"].decode("utf-8")}')
 
-                # send message to all other users/clients
-                for client in clients:
-                    # not sending message to sender client
-                    if client != socket:
-                        client.send(user['header'] + user['data'] + message['header'] + message['data'])
+                if data.type == "personal":
+                    handle_personal_msg(data, socket)
+                elif data.type == "group":
+                    pass
+                elif data.type == "file_transfer":
+                    pass
+
+                # # send message to all other users/clients
+                # for client in clients:
+                #     # not sending message to sender client
+                #     if client != socket:
+                #         client.send(user['header'] + user['data'] + message['header'] + message['data'])
 
         # handling sockets which encountered exception
         for socket in exception_sockets:
