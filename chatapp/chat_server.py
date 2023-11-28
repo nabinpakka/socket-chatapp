@@ -72,6 +72,7 @@ if __name__ == '__main__':
                 socket_list.append(client_socket)
                 clients[client_socket] = user
                 print('Accepted new connection from {}:{}, username: {}'.format(*client_address, user['data'].decode('utf-8')))
+                client_socket.send(('Accepted new connection from {}:{}, username: {}'.format(*client_address, user['data'])).encode("utf-8"))
             else:
                 # an existing user is sending a message
                 message = receive_message(socket)

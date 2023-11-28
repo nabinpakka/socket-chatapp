@@ -1,7 +1,9 @@
+import select
 import socket
 import errno
 import sys
 import threading
+import time
 
 HEADER_LENGTH = 10
 
@@ -10,10 +12,9 @@ PORT = 5555
 
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 client_socket.connect((IP, PORT))
-ack = client_socket.recv(1048)
-print("Acknowledgement received from the server: ", str(ack))
 
-def listen_for_message(current_user):
+
+def listen_for_message():
     while True:
         try:
             # looping over the messages
@@ -33,8 +34,7 @@ def listen_for_message(current_user):
                 message_length = int(message_header.decode("utf-8").strip())
                 message = client_socket.recv(message_length).decode("utf-8")
 
-                print(f"\n{username} > {message}")
-                print(f"{current_user} > ")
+                print(f"{username} > {message}\n")
         except IOError as e:
             # This is normal on non blocking connections - when there are no incoming data error is going to be raised
             # Some operating systems will indicate that using AGAIN, and some using WOULDBLOCK error code
@@ -63,59 +63,61 @@ if __name__ == '__main__':
     username_header = f"{len(username):<{HEADER_LENGTH}}".encode('utf-8')
     client_socket.send(username_header + username)
 
-    listener = threading.Thread(target=listen_for_message, args=(str(my_username),))
-    listener.start()
+    time.sleep(1)
+    ack = client_socket.recv(1048)
+    print("Acknowledgement received from the server: ", str(ack.decode("utf-8")))
+    #
+    # listener = threading.Thread(target=listen_for_message)
+    # listener.start()
 
     while True:
-        # # Check if there is any input to read
-        # sockets_list = [sys.stdin, client_socket]
-        # read_sockets, _, _ = select.select(sockets_list, [], [], 0.1)
-        #
-        # for socket in read_sockets:
-        message = input(f"{my_username} > ")
+        # Check if there is any input to read
+        sockets_list = [sys.stdin, client_socket]
+        read_sockets, _, _ = select.select(sockets_list, [], [], 0.1)
 
-        if message:
-            message = message.encode("utf-8")
-            message_header = f"{len(message):<{HEADER_LENGTH}}".encode('utf-8')
-            client_socket.send(message_header + message)
-            # if socket == sys.stdin:
+        for socket in read_sockets:
+            if socket == sys.stdin:
+                message = sys.stdin.readline().strip()
+                print(f"{my_username} > {message}")
+                message = message.encode("utf-8")
+                message_header = f"{len(message):<{HEADER_LENGTH}}".encode('utf-8')
+                client_socket.send(message_header + message)
+            else:
+                try:
+                    # looping over the messages
+                    while True:
+                        username_header = client_socket.recv(HEADER_LENGTH)
 
-            # else:
-            #     try:
-            #         # looping over the messages
-            #         while True:
-            #             username_header = client_socket.recv(HEADER_LENGTH)
-            #
-            #             # if no data is received, the server has gracefully closed a connection
-            #             if not len(username_header):
-            #                 print("Connection has been closed by the server.")
-            #                 sys.exit()
-            #
-            #             username_length = int(username_header.decode("utf-8").strip())
-            #             username = client_socket.recv(username_length).decode("utf-8")
-            #
-            #             # getting message
-            #             message_header = client_socket.recv(HEADER_LENGTH)
-            #             message_length = int(message_header.decode("utf-8").strip())
-            #             message = client_socket.recv(message_length).decode("utf-8")
-            #
-            #             print(f"{username} > {message}")
-            #     except IOError as e:
-            #         # This is normal on non blocking connections - when there are no incoming data error is going to be raised
-            #         # Some operating systems will indicate that using AGAIN, and some using WOULDBLOCK error code
-            #         # We are going to check for both - if one of them - that's expected, means no incoming data, continue as normal
-            #         # If we got different error code - something happened
-            #         if e.errno != errno.EAGAIN and e.errno != errno.EWOULDBLOCK:
-            #             print('Reading error: {}'.format(str(e)))
-            #             sys.exit()
-            #
-            #         # We just did not receive anything
-            #         continue
-            #
-            #     except Exception as e:
-            #         # Any other exception - something happened, exit
-            #         print('Reading error: '.format(str(e)))
-            #         sys.exit()
+                        # if no data is received, the server has gracefully closed a connection
+                        if not len(username_header):
+                            print("Connection has been closed by the server.")
+                            sys.exit()
+
+                        username_length = int(username_header.decode("utf-8").strip())
+                        username = client_socket.recv(username_length).decode("utf-8")
+
+                        # getting message
+                        message_header = client_socket.recv(HEADER_LENGTH)
+                        message_length = int(message_header.decode("utf-8").strip())
+                        message = client_socket.recv(message_length).decode("utf-8")
+
+                        print(f"{username} > {message}")
+                except IOError as e:
+                    # This is normal on non blocking connections - when there are no incoming data error is going to be raised
+                    # Some operating systems will indicate that using AGAIN, and some using WOULDBLOCK error code
+                    # We are going to check for both - if one of them - that's expected, means no incoming data, continue as normal
+                    # If we got different error code - something happened
+                    if e.errno != errno.EAGAIN and e.errno != errno.EWOULDBLOCK:
+                        print('Reading error: {}'.format(str(e)))
+                        sys.exit()
+
+                    # We just did not receive anything
+                    continue
+
+                except Exception as e:
+                    # Any other exception - something happened, exit
+                    print('Reading error: '.format(str(e)))
+                    sys.exit()
 
 
 
