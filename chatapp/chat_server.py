@@ -1,11 +1,16 @@
+import os.path
 import pickle
 import socket
 import select # gives OS level monitoring operations for things
 from message_model import Message
+from file_handler import FileHandler
 
 
 HEADER_LENGTH = 10
 HEADERSIZE=10
+MSG_PREVIEW_LENGTH= 20
+
+SERVER_DIR_PATH = "/Users/hubbleloo/PycharmProjects/pythonProject/chatapp/files/server"
 
 IP = "127.0.0.1"
 PORT = 5555
@@ -61,23 +66,59 @@ def get_socket_using_username(username):
 def send_msg_to_client(msg, client_socket):
     msg = bytes(f"{len(msg):<{HEADER_LENGTH}}", 'utf-8') + msg
     client_socket.send(msg)
+
+def handle_username_not_connected(username, sender_socket):
+    error = f"User {data.receiver} is not connected to the server."
+    error_msg = Message("server", user["data"], error, "error")
+    error_msg = pickle.dumps(error_msg)
+    send_msg_to_client(error_msg, sender_socket)
+    print("ERROR: ", f"User {data.receiver} is not connected to the server.")
 def handle_personal_msg(data, sender_socket):
     # getting user who sent the message
     user = clients[sender_socket]
     # check if client is available
     if data.receiver not in usernames:
-        error = f"User {data.receiver} is not connected to the server."
-        error_msg = Message("server", user["data"], error,"error")
-        send_msg_to_client(error_msg, sender_socket)
-        print("ERROR: ",f"User {data.receiver} is not connected to the server.")
+        handle_username_not_connected(data.receiver, sender_socket)
         return
 
-    preview_length = 20
-    print(f"Message received from {data.sender} for {data.receiver} with msg {data.msg[:preview_length]}")
+    print(f"Message received from {data.sender} for {data.receiver} with msg {data.msg[:MSG_PREVIEW_LENGTH]}")
     receiver = data.receiver
     receiver_socket = get_socket_using_username(receiver)
     msg = pickle.dumps(data)
     send_msg_to_client(msg, receiver_socket)
+
+def handle_group_msg(data, socket):
+    print(f"Message received from {data.sender} for group with msg {data.msg[:MSG_PREVIEW_LENGTH]}")
+    # send message to all other users/clients
+    for client in clients:
+        # not sending message to sender client
+        if client != socket:
+            msg = pickle.dumps(data)
+            send_msg_to_client(msg, client)
+def handle_file_transfer(data, socket):
+    #check if the user is connected or not
+    if data.receiver not in usernames:
+        handle_username_not_connected(data.receiver, socket)
+
+    filehandler = FileHandler(socket)
+
+    filename = os.path.basename(data.filename)
+    output_path = os.path.join(SERVER_DIR_PATH, filename)
+
+    filehandler.receive_and_save_file(output_path, int(data.msg))
+
+    # now send the same file to the receiver
+    receiver_socket = get_socket_using_username(data.receiver)
+
+    # first send msg for file transfer
+    filesize = os.path.getsize(output_path)
+    msg = str(filesize)
+    message = Message("Server", data.receiver,msg, "file_transfer", output_path)
+    message = pickle.dumps(message)
+    message = bytes(f"{len(message):<{HEADER_LENGTH}}", 'utf-8') + message
+    receiver_socket.send(message)
+
+    filehandler.send_file(output_path, receiver_socket)
 
 if __name__ == '__main__':
 
@@ -119,6 +160,7 @@ if __name__ == '__main__':
                 if message is False:
                     print('Closed connection from: {}'.format(clients[socket]['data'].decode('utf-8')))
                     socket_list.remove(socket)
+                    usernames.remove(clients[socket]['data'].decode('utf-8'))
                     del clients[socket]
                     continue
 
@@ -130,15 +172,9 @@ if __name__ == '__main__':
                 if data.type == "personal":
                     handle_personal_msg(data, socket)
                 elif data.type == "group":
-                    pass
+                    handle_group_msg(data, socket)
                 elif data.type == "file_transfer":
-                    pass
-
-                # # send message to all other users/clients
-                # for client in clients:
-                #     # not sending message to sender client
-                #     if client != socket:
-                #         client.send(user['header'] + user['data'] + message['header'] + message['data'])
+                    handle_file_transfer(data, socket)
 
         # handling sockets which encountered exception
         for socket in exception_sockets:

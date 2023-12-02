@@ -1,3 +1,4 @@
+import os.path
 import pickle
 import select
 import socket
@@ -6,15 +7,22 @@ import sys
 import threading
 import time
 
+from file_handler import FileHandler
 from message_model import Message
+from cyptographer import Cryptograher
 
 HEADER_LENGTH = 10
+CLIENT_DIR_PATH = "/Users/hubbleloo/PycharmProjects/pythonProject/chatapp/files/client"
+
 
 IP = "127.0.0.1"
 PORT = 5555
 
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 client_socket.connect((IP, PORT))
+
+PASSWORD = b'PASSWORD1234'
+SALT = b'SALT1234'
 
 
 def listen_for_message():
@@ -64,7 +72,14 @@ def get_msg_type() -> int:
     msg_type = int(input())
     return msg_type
 
+def handle_file_receive(message):
+    filehandler = FileHandler(client_socket)
+    filename = os.path.basename(message.filename)
+    output_path = CLIENT_DIR_PATH + "/" + my_username + "/" + filename
+    filehandler.receive_and_save_file(output_path, int(message.msg))
 def start_messaging(msg_type = "personal", receiver = None):
+    cryptographer = Cryptograher(PASSWORD, SALT)
+    key = cryptographer.derive_key()
     while True:
         # Check if there is any input to read
         sockets_list = [sys.stdin, client_socket]
@@ -73,8 +88,11 @@ def start_messaging(msg_type = "personal", receiver = None):
         for socket in read_sockets:
             if socket == sys.stdin:
                 message = sys.stdin.readline().strip()
+                encrypted_msg = cryptographer.encrypt(message, key)
                 print(f"{my_username} > {message}")
-                msg = Message(my_username, receiver, message, msg_type)
+                print(f"{my_username} > encrypted > {encrypted_msg}")
+
+                msg = Message(my_username, receiver, encrypted_msg, msg_type)
                 msg = pickle.dumps(msg)
                 msg = bytes(f"{len(msg):<{HEADER_LENGTH}}", 'utf-8') + msg
 
@@ -87,7 +105,6 @@ def start_messaging(msg_type = "personal", receiver = None):
                         # # if no data is received, the server has gracefully closed a connection
                         # username_length = int(username_header.decode("utf-8").strip())
                         # username = client_socket.recv(username_length).decode("utf-8")
-
                         # getting message
                         message_header = client_socket.recv(HEADER_LENGTH)
                         if not len(message_header):
@@ -97,7 +114,13 @@ def start_messaging(msg_type = "personal", receiver = None):
                         message = client_socket.recv(message_length)
                         message = pickle.loads(message)
 
-                        print(f"{message.sender} > {message.msg}")
+                        if(message.type == "file_transfer"):
+                            handle_file_receive(message)
+
+                        decrypted_msg = cryptographer.decrypt(message.msg, key)
+                        print(f"{message.sender} > encrypted > {message.msg}")
+                        print(f"{message.sender} > {decrypted_msg}")
+
                 except IOError as e:
                     # This is normal on non blocking connections - when there are no incoming data error is going to be raised
                     # Some operating systems will indicate that using AGAIN, and some using WOULDBLOCK error code
@@ -114,6 +137,20 @@ def start_messaging(msg_type = "personal", receiver = None):
                     # Any other exception - something happened, exit
                     print('Reading error: '.format(str(e.__str__())))
                     sys.exit()
+
+
+def send_file(filepath, receiver):
+    filesize = os.path.getsize(filepath)
+    filehandler = FileHandler(client_socket)
+
+    # first send msg for file transfer
+    msg = str(filesize)
+    message = Message(my_username, receiver,msg, "file_transfer", filepath)
+    message = pickle.dumps(message)
+    message = bytes(f"{len(message):<{HEADER_LENGTH}}", 'utf-8') + message
+    client_socket.send(message)
+
+    filehandler.send_file(filepath)
 
 if __name__ == '__main__':
     my_username = input("Enter a username: ")
@@ -141,6 +178,13 @@ if __name__ == '__main__':
         receiver = input("Enter username of receiver: ")
 
         start_messaging("personal", receiver)
+    elif msg_type ==2:
+        start_messaging("group")
+    elif msg_type == 3:
+        receiver = input("Enter username of receiver: ")
+        filepath = CLIENT_DIR_PATH + "/"+my_username+"/" + "test.txt"
+        send_file(filepath, receiver)
+
 
 
 
