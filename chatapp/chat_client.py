@@ -18,9 +18,6 @@ CLIENT_DIR_PATH = "/Users/hubbleloo/PycharmProjects/pythonProject/chatapp/files/
 IP = "127.0.0.1"
 PORT = 5555
 
-client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-client_socket.connect((IP, PORT))
-
 PASSWORD = b'PASSWORD1234'
 SALT = b'SALT1234'
 
@@ -118,7 +115,6 @@ def start_messaging(msg_type = "personal", receiver = None):
                             handle_file_receive(message)
 
                         decrypted_msg = cryptographer.decrypt(message.msg, key)
-                        print(f"{message.sender} > encrypted > {message.msg}")
                         print(f"{message.sender} > {decrypted_msg}")
 
                 except IOError as e:
@@ -153,7 +149,12 @@ def send_file(filepath, receiver):
     filehandler.send_file(filepath)
 
 if __name__ == '__main__':
+
+    print("###################### WELCOME TO csce513fall22Msg CHAT APP ######################")
+
     my_username = input("Enter a username: ")
+    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    client_socket.connect((IP, PORT))
 
     # setting the socket to non-blocking mode
     client_socket.setblocking(False)

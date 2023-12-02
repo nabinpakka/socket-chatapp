@@ -2,6 +2,8 @@ import os.path
 import pickle
 import socket
 import select # gives OS level monitoring operations for things
+from threading import Thread
+
 from message_model import Message
 from file_handler import FileHandler
 
@@ -120,6 +122,14 @@ def handle_file_transfer(data, socket):
 
     filehandler.send_file(output_path, receiver_socket)
 
+def handle_new_client(client_socket):
+    socket_list.append(client_socket)
+    clients[client_socket] = user
+    usernames.append(user['data'].decode('utf-8'))
+    print('Accepted new connection from {}:{}, username: {}'.format(*client_address, user['data'].decode('utf-8')))
+    client_socket.send(
+        ('Accepted new connection from {}:{}, username: {}'.format(*client_address, user['data'])).encode("utf-8"))
+
 if __name__ == '__main__':
 
     while True:
@@ -147,12 +157,8 @@ if __name__ == '__main__':
                 # the client disconnected before sending username
                 if not user:
                     continue
+                Thread(target=handle_new_client, args=(client_socket,)).start()
 
-                socket_list.append(client_socket)
-                clients[client_socket] = user
-                usernames.append(user['data'].decode('utf-8'))
-                print('Accepted new connection from {}:{}, username: {}'.format(*client_address, user['data'].decode('utf-8')))
-                client_socket.send(('Accepted new connection from {}:{}, username: {}'.format(*client_address, user['data'])).encode("utf-8"))
             else:
                 # an existing user is sending a message
                 message = receive_message(socket, "user")
