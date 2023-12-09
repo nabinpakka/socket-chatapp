@@ -2,6 +2,7 @@ import os.path
 import pickle
 import socket
 import select # gives OS level monitoring operations for things
+import time
 from threading import Thread
 
 from message_model import Message
@@ -133,15 +134,6 @@ def handle_new_client(client_socket):
 if __name__ == '__main__':
 
     while True:
-        # Calls Unix select() system call or Windows select() WinSock call with three parameters:
-        #   - rlist - sockets to be monitored for incoming data
-        #   - wlist - sockets for data to be send to (checks if for example buffers are not full and socket is ready to send some data)
-        #   - xlist - sockets to be monitored for exceptions (we want to monitor all sockets for errors, so we can use rlist)
-        # Returns lists:
-        #   - reading - sockets we received some data on (that way we don't have to check sockets manually)
-        #   - writing - sockets ready for data to be send thru them
-        #   - errors  - sockets with some exceptions
-        # This is a blocking call, code execution will "wait" here and "get" notified in case any action should be taken
         read_sockets, _, exception_sockets = select.select(socket_list, [], socket_list)
 
         # iterate over the read sockets

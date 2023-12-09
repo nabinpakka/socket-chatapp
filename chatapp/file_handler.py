@@ -35,5 +35,4 @@ class FileHandler:
                 file.write(data)
                 data = self.socket.recv(TRANSFER_SIZE)
                 progress.update(len(data))
-
         print("File received successfully.")

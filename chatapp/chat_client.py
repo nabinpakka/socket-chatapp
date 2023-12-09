@@ -79,6 +79,7 @@ def start_messaging(msg_type = "personal", receiver = None):
     key = cryptographer.derive_key()
     while True:
         # Check if there is any input to read
+
         sockets_list = [sys.stdin, client_socket]
         read_sockets, _, _ = select.select(sockets_list, [], [], 0.1)
 
@@ -123,7 +124,8 @@ def start_messaging(msg_type = "personal", receiver = None):
                     # We are going to check for both - if one of them - that's expected, means no incoming data, continue as normal
                     # If we got different error code - something happened
                     if e.errno != errno.EAGAIN and e.errno != errno.EWOULDBLOCK:
-                        print('Reading error: {}'.format(str(e)))
+                        print(f"The receiver {receiver} is not connected to the server.")
+                        # print('Reading error: {}'.format(str(e)))
                         sys.exit()
 
                     # We just did not receive anything
@@ -131,7 +133,7 @@ def start_messaging(msg_type = "personal", receiver = None):
 
                 except Exception as e:
                     # Any other exception - something happened, exit
-                    print('Reading error: '.format(str(e.__str__())))
+                    print(f"The receiver {receiver} is not connected to the server.")
                     sys.exit()
 
 
@@ -177,7 +179,6 @@ if __name__ == '__main__':
     if msg_type == 1:
         # this is personal message type
         receiver = input("Enter username of receiver: ")
-
         start_messaging("personal", receiver)
     elif msg_type ==2:
         start_messaging("group")
